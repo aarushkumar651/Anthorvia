@@ -10,7 +10,7 @@ const { config } = require('../config/env');
 validateEnv();
 
 const worker = new Worker(
-  'kairos:game-fetch',
+  'kairos-game-fetch',
   async (job) => {
     const { userId, platform, forceRefresh = false } = job.data;
 
