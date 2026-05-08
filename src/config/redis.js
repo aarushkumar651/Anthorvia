@@ -6,10 +6,12 @@ let redisClient;
 let subscriberClient;
 
 function createRedisConnection(name = 'main') {
+  const isTLS = config.redis.url && config.redis.url.startsWith('rediss://');
+
   const client = new Redis(config.redis.url, {
-    password: config.redis.password,
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
+    ...(isTLS && { tls: {} }),
     retryStrategy(times) {
       const delay = Math.min(times * 50, 2000);
       return delay;
@@ -43,10 +45,18 @@ function getSubscriberRedis() {
 }
 
 function getBullMQConnection() {
+  const url = config.redis.url;
+  if (!url) throw new Error('REDIS_URL is not set');
+
+  const parsed = new URL(url);
+  const isTLS = url.startsWith('rediss://');
+
   return {
-    host: new URL(config.redis.url).hostname,
-    port: parseInt(new URL(config.redis.url).port || '6379', 10),
-    password: config.redis.password,
+    host: parsed.hostname,
+    port: parseInt(parsed.port || '6379', 10),
+    password: parsed.password || undefined,
+    username: parsed.username || 'default',
+    ...(isTLS && { tls: {} }),
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
   };
