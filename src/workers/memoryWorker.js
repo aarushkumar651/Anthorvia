@@ -9,7 +9,7 @@ const { config } = require('../config/env');
 validateEnv();
 
 const worker = new Worker(
-  'kairos:memory',
+  'kairos-memory',
   async (job) => {
     const { userId, userMessage, aiResponse, sessionId } = job.data;
 
