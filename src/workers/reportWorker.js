@@ -9,7 +9,7 @@ const { config } = require('../config/env');
 validateEnv();
 
 const worker = new Worker(
-  'kairos:report',
+  'kairos-report',
   async (job) => {
     const { userId, reportType } = job.data;
 
