@@ -7,13 +7,17 @@ let pool;
 function getPool() {
   if (!pool) {
     pool = new Pool({
-      connectionString: config.db.url,
-      min: config.db.poolMin,
-      max: config.db.poolMax,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
-      ssl: config.isProduction ? { rejectUnauthorized: false } : false,
-    });
+  host: process.env.DB_HOST,
+  port: parseInt(process.env.DB_PORT || '6543', 10),
+  database: process.env.DB_NAME || 'postgres',
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  ssl: { rejectUnauthorized: false },
+  min: config.db.poolMin,
+  max: config.db.poolMax,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+});
 
     pool.on('connect', () => {
       logger.debug('New database client connected');
