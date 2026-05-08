@@ -11,9 +11,17 @@ async function bootstrap() {
 
   logger.info('Kairos API starting...', { env: config.env });
 
+  try {
   await testDb();
-  await testRedis();
+} catch (err) {
+  logger.warn('DB connection failed on startup - will retry on requests', { error: err.message });
+}
 
+try {
+  await testRedis();
+} catch (err) {
+  logger.warn('Redis connection failed on startup - will retry', { error: err.message });
+}
   const server = app.listen(config.port, '0.0.0.0', () => {
     logger.info(`Kairos API listening`, {
       port: config.port,
