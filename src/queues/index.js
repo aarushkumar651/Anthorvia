@@ -51,7 +51,7 @@ async function addAnalysisJob(gameId, userId, plan, priority = 0) {
     { gameId, userId, plan },
     {
       priority: plan === 'pro' ? 10 : plan === 'basic' ? 5 : 0,
-      jobId: `analysis:${gameId}`,
+      jobId: `analysis-${gameId}`,
     }
   );
   logger.debug('Analysis job added', { jobId: job.id, gameId });
@@ -63,7 +63,7 @@ async function addGameFetchJob(userId, platform, options = {}) {
     'fetch-games',
     { userId, platform, ...options },
     {
-      jobId: `fetch:${userId}:${platform}`,
+      jobId: `fetch-${userId}-${platform}`,
     }
   );
   logger.debug('Game fetch job added', { jobId: job.id, userId, platform });
