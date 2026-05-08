@@ -16,7 +16,7 @@ validateEnv();
 const DEPTH_BY_PLAN = config.stockfish.depthByPlan;
 
 const worker = new Worker(
-  'kairos:analysis',
+  'kairos-analysis',
   async (job) => {
     const { gameId, userId, plan } = job.data;
     const depth = DEPTH_BY_PLAN[plan] || DEPTH_BY_PLAN.free;
