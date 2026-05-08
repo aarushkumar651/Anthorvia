@@ -14,12 +14,12 @@ const defaultJobOptions = {
   },
 };
 
-const analysisQueue = new Queue('kairos:analysis', {
+const analysisQueue = new Queue('kairos-analysis', {
   connection,
   defaultJobOptions,
 });
 
-const gameFetchQueue = new Queue('kairos:game-fetch', {
+const gameFetchQueue = new Queue('kairos-game-fetch', {
   connection,
   defaultJobOptions: {
     ...defaultJobOptions,
@@ -28,7 +28,7 @@ const gameFetchQueue = new Queue('kairos:game-fetch', {
   },
 });
 
-const reportQueue = new Queue('kairos:report', {
+const reportQueue = new Queue('kairos-report', {
   connection,
   defaultJobOptions: {
     ...defaultJobOptions,
@@ -36,7 +36,7 @@ const reportQueue = new Queue('kairos:report', {
   },
 });
 
-const memoryQueue = new Queue('kairos:memory', {
+const memoryQueue = new Queue('kairos-memory', {
   connection,
   defaultJobOptions: {
     ...defaultJobOptions,
