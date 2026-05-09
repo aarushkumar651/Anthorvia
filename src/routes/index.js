@@ -10,5 +10,6 @@ router.use('/chat', require('./chat'));
 router.use('/reports', require('./reports'));
 router.use('/subscriptions', require('./subscriptions'));
 router.use('/training', require('./training'));
+router.use('/voice', require('../voice/routes/voice'));
 
 module.exports = router;
