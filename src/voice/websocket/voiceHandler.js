@@ -116,17 +116,16 @@ async function handleVoiceConnection(ws, request) {
             break;
           }
 
-          // FUTURE: Initialize STT stream
-          // await sttService.startStream(
-          //   sessionId,
-          //   async (transcript, isFinal) => {
-          //     sendMessage(ws, 'transcript', { text: transcript, isFinal });
-          //     if (isFinal && transcript.trim()) {
-          //       await processTurnAndRespond(ws, user, sessionId, transcript);
-          //     }
-          //   },
-          //   (error) => sendMessage(ws, 'error', { message: error.message })
-          // );
+          await sttService.startStream(
+  activeSessionId,
+  async (transcript, isFinal) => {
+    sendMessage(ws, 'transcript', { text: transcript, isFinal });
+    if (isFinal && transcript.trim()) {
+      await processTurnAndRespond(ws, user, activeSessionId, transcript);
+    }
+  },
+  (error) => sendMessage(ws, 'error', { message: error.message })
+);
 
           const session = await voiceSessionService.createSession(
             user.id,
@@ -161,10 +160,8 @@ async function handleVoiceConnection(ws, request) {
             break;
           }
 
-          // FUTURE: Forward audio to STT
-          // const audioBuffer = Buffer.from(message.data, 'base64');
-          // await sttService.sendAudioChunk(activeSessionId, audioBuffer);
-
+          const audioBuffer = Buffer.from(message.data, 'base64');
+await sttService.sendAudioChunk(activeSessionId, audioBuffer);
           // Update chunk count
           await voiceSessionService.updateSession(activeSessionId, {
             audioChunksReceived: ((await voiceSessionService.getSession(activeSessionId))?.audioChunksReceived || 0) + 1,
@@ -206,24 +203,47 @@ async function handleVoiceConnection(ws, request) {
   });
 }
 
-/**
- * FUTURE: Process a complete user turn and generate AI + TTS response.
- * Called when a final transcript is received.
- */
 async function processTurnAndRespond(ws, user, sessionId, transcript) {
-  // FUTURE IMPLEMENTATION:
-  // 1. Send transcript to AI coach (aiService.chat())
-  // 2. Stream AI text back to client
-  // 3. Convert AI text to speech (ttsService.streamSpeech())
-  // 4. Send audio chunks back to client
+  try {
+    logger.info('Voice: Processing turn', { sessionId, transcript });
 
-  logger.info('Voice: Processing turn', { sessionId, transcriptLength: transcript.length });
+    const { chat } = require('../../services/aiService');
 
-  // Placeholder response
-  sendMessage(ws, 'ai_text', {
-    text: 'Voice AI response coming soon! Your coach is listening.',
-  });
-  sendMessage(ws, 'audio_done');
+    sendMessage(ws, 'ai_text_start');
+
+    let fullAiText = '';
+
+    const { response } = await chat(
+      user,
+      transcript,
+      null,
+      null,
+      (chunk) => {
+        fullAiText += chunk;
+        sendMessage(ws, 'ai_text_chunk', { text: chunk });
+      }
+    );
+
+    sendMessage(ws, 'ai_text_done', { text: fullAiText });
+
+    sendMessage(ws, 'audio_start');
+
+    await ttsService.streamSpeech(
+      fullAiText,
+      (audioChunk) => {
+        sendMessage(ws, 'audio_chunk', {
+          data: audioChunk.toString('base64'),
+        });
+      },
+      () => {
+        sendMessage(ws, 'audio_done');
+        logger.info('Voice: Turn complete', { sessionId });
+      }
+    );
+  } catch (err) {
+    logger.error('Voice: Turn processing error', { sessionId, error: err.message });
+    sendMessage(ws, 'error', { message: 'Failed to process voice turn' });
+  }
 }
 
 module.exports = { handleVoiceConnection };
