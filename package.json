@@ -41,7 +41,9 @@
     "winston": "^3.13.0",
     "winston-daily-rotate-file": "^5.0.0",
     "xss": "^1.0.15",
-"ws": "^8.17.1"
+"ws": "^8.17.1",
+    "@deepgram/sdk": "^3.3.0",
+"elevenlabs": "^0.17.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"
