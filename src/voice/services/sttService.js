@@ -1,52 +1,87 @@
-/**
- * SPEECH-TO-TEXT SERVICE
- * 
- * Future integration points:
- * - Deepgram Nova-2 (recommended for low latency, Indian English support)
- * - OpenAI Whisper (higher accuracy, higher latency)
- * 
- * How it will work:
- * 1. Mobile app streams audio chunks via WebSocket
- * 2. This service receives raw audio buffer
- * 3. Forwards to STT provider
- * 4. Returns transcript (interim + final)
- * 5. Final transcript goes to AI coach for response
- */
-
+const { createClient, LiveTranscriptionEvents } = require('@deepgram/sdk');
 const voiceConfig = require('../config/voiceConfig');
 const logger = require('../../config/logger');
 
 class STTService {
   constructor() {
     this.provider = voiceConfig.stt.provider;
-    this.activeConnections = new Map(); // sessionId -> STT connection
+    this.activeConnections = new Map();
+    this.deepgram = null;
   }
 
-  /**
-   * Initialize a streaming STT connection for a voice session.
-   * Call this when user starts speaking.
-   * 
-   * @param {string} sessionId - Voice session ID
-   * @param {Function} onTranscript - Callback: (text, isFinal) => void
-   * @param {Function} onError - Callback: (error) => void
-   */
+  _getDeepgramClient() {
+    if (!this.deepgram) {
+      if (!voiceConfig.stt.deepgram.apiKey) {
+        throw new Error('DEEPGRAM_API_KEY is not set');
+      }
+      this.deepgram = createClient(voiceConfig.stt.deepgram.apiKey);
+    }
+    return this.deepgram;
+  }
+
   async startStream(sessionId, onTranscript, onError) {
     if (this.provider === 'deepgram') {
       return this._startDeepgramStream(sessionId, onTranscript, onError);
     }
-    if (this.provider === 'openai-whisper') {
-      return this._startWhisperBuffer(sessionId, onTranscript, onError);
-    }
     throw new Error(`Unsupported STT provider: ${this.provider}`);
   }
 
-  /**
-   * Send audio chunk to active STT stream.
-   * Audio format expected: PCM 16-bit, 16kHz, mono
-   * 
-   * @param {string} sessionId
-   * @param {Buffer} audioChunk
-   */
+  async _startDeepgramStream(sessionId, onTranscript, onError) {
+    try {
+      const client = this._getDeepgramClient();
+
+      const connection = client.listen.live({
+        model: voiceConfig.stt.deepgram.model,
+        language: voiceConfig.stt.deepgram.language,
+        punctuate: voiceConfig.stt.deepgram.punctuate,
+        interim_results: voiceConfig.stt.deepgram.interimResults,
+        endpointing: voiceConfig.stt.deepgram.endpointing,
+        smart_format: true,
+        encoding: 'linear16',
+        sample_rate: 16000,
+        channels: 1,
+      });
+
+      connection.on(LiveTranscriptionEvents.Open, () => {
+        logger.info('STT: Deepgram connection opened', { sessionId });
+      });
+
+      connection.on(LiveTranscriptionEvents.Transcript, (data) => {
+        const transcript = data.channel?.alternatives?.[0]?.transcript;
+        if (!transcript) return;
+
+        const isFinal = data.is_final === true;
+        const speechFinal = data.speech_final === true;
+
+        logger.debug('STT: Transcript received', {
+          sessionId,
+          text: transcript,
+          isFinal,
+          speechFinal,
+        });
+
+        onTranscript(transcript, isFinal || speechFinal);
+      });
+
+      connection.on(LiveTranscriptionEvents.Error, (err) => {
+        logger.error('STT: Deepgram error', { sessionId, error: err.message });
+        if (onError) onError(err);
+      });
+
+      connection.on(LiveTranscriptionEvents.Close, () => {
+        logger.info('STT: Deepgram connection closed', { sessionId });
+        this.activeConnections.delete(sessionId);
+      });
+
+      this.activeConnections.set(sessionId, connection);
+
+      logger.info('STT: Deepgram stream started', { sessionId });
+    } catch (err) {
+      logger.error('STT: Failed to start Deepgram stream', { sessionId, error: err.message });
+      if (onError) onError(err);
+    }
+  }
+
   async sendAudioChunk(sessionId, audioChunk) {
     const connection = this.activeConnections.get(sessionId);
     if (!connection) {
@@ -54,84 +89,44 @@ class STTService {
       return;
     }
 
-    // FUTURE IMPLEMENTATION:
-    // connection.send(audioChunk);
-    logger.debug('STT: Audio chunk received', {
-      sessionId,
-      bytes: audioChunk.length,
-      provider: this.provider,
-    });
+    try {
+      connection.send(audioChunk);
+    } catch (err) {
+      logger.error('STT: Failed to send audio chunk', { sessionId, error: err.message });
+    }
   }
 
-  /**
-   * Stop STT stream for a session.
-   * @param {string} sessionId
-   */
   async stopStream(sessionId) {
     const connection = this.activeConnections.get(sessionId);
     if (connection) {
-      // FUTURE: connection.finish();
+      try {
+        connection.requestClose();
+      } catch {}
       this.activeConnections.delete(sessionId);
       logger.info('STT: Stream stopped', { sessionId });
     }
   }
 
-  /**
-   * FUTURE: Deepgram live streaming implementation
-   * 
-   * Will use: @deepgram/sdk
-   * const { createClient } = require('@deepgram/sdk');
-   * const deepgram = createClient(voiceConfig.stt.deepgram.apiKey);
-   * const connection = deepgram.listen.live({ model: 'nova-2', language: 'en-IN', ... });
-   */
-  async _startDeepgramStream(sessionId, onTranscript, onError) {
-    // PLACEHOLDER — implement when DEEPGRAM_API_KEY is set
-    logger.info('STT: Deepgram stream would start here', { sessionId });
-
-    // Simulate storing connection reference
-    this.activeConnections.set(sessionId, {
-      provider: 'deepgram',
-      startedAt: new Date(),
-    });
-  }
-
-  /**
-   * FUTURE: OpenAI Whisper batch implementation
-   * Whisper doesn't support true streaming — buffers audio then transcribes.
-   * 
-   * Will use: openai.audio.transcriptions.create({ file, model: 'whisper-1' })
-   */
-  async _startWhisperBuffer(sessionId, onTranscript, onError) {
-    // PLACEHOLDER — implement when ready
-    logger.info('STT: Whisper buffer would start here', { sessionId });
-
-    this.activeConnections.set(sessionId, {
-      provider: 'whisper',
-      audioBuffer: [],
-      startedAt: new Date(),
-    });
-  }
-
-  /**
-   * One-shot transcription for uploaded audio files.
-   * Useful for voice message feature.
-   * 
-   * @param {Buffer} audioBuffer
-   * @param {string} mimeType - 'audio/webm', 'audio/mp4', etc.
-   * @returns {Promise<string>} - Transcript text
-   */
   async transcribeAudioFile(audioBuffer, mimeType = 'audio/webm') {
-    // FUTURE IMPLEMENTATION:
-    // const openai = require('../../services/aiService').getOpenAIClient();
-    // const transcript = await openai.audio.transcriptions.create({
-    //   file: new File([audioBuffer], 'audio.webm', { type: mimeType }),
-    //   model: 'whisper-1',
-    //   language: 'en',
-    // });
-    // return transcript.text;
+    const client = this._getDeepgramClient();
 
-    logger.info('STT: File transcription placeholder called');
-    throw new Error('Voice feature not yet implemented. Coming soon!');
+    const { result, error } = await client.listen.prerecorded.transcribeFile(
+      audioBuffer,
+      {
+        model: voiceConfig.stt.deepgram.model,
+        language: voiceConfig.stt.deepgram.language,
+        punctuate: true,
+        smart_format: true,
+        mimetype: mimeType,
+      }
+    );
+
+    if (error) throw new Error(`Deepgram transcription error: ${error.message}`);
+
+    const transcript = result?.results?.channels?.[0]?.alternatives?.[0]?.transcript;
+    if (!transcript) throw new Error('No transcript returned from Deepgram');
+
+    return transcript;
   }
 }
 
